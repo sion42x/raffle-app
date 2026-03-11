@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Keyboard from 'react-simple-keyboard';
+import 'react-simple-keyboard/build/css/index.css';
 
 const PURCHASE_LEVELS = {
   none:        { label: 'No Purchase',       entries: 0, icon: '—'  },
@@ -291,6 +293,10 @@ export default function App() {
   const [error, setError] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const nameRef = useRef(null);
+  const [activeInput, setActiveInput] = useState(null);
+  const [keyboardLayout, setKeyboardLayout] = useState('default');
+  const keyboardRef = useRef(null);
+  const [vkEnabled, setVkEnabled] = useState(() => localStorage.getItem('vkEnabled') !== 'false');
 
 
   // ── Data loading ────────────────────────────────────────────────
@@ -342,7 +348,7 @@ export default function App() {
     } catch (e) {
       setError(e.message);
     }
-  }, [formData, formNewsletter, formPurchase, refresh]);
+  }, [formData, formNewsletter, formPurchase, formQty, refresh]);
 
   const updateEntrant = useCallback(async (id, changes) => {
     try {
@@ -391,6 +397,42 @@ export default function App() {
   const exportCSV = useCallback(() => { window.open('/api/export', '_blank'); }, []);
   const exportNewsletter = useCallback(() => { window.open('/api/export/newsletter', '_blank'); }, []);
 
+  // ── Virtual keyboard ────────────────────────────────────────────
+
+  const onKeyboardChange = useCallback((val) => {
+    if (!activeInput) return;
+    if (activeInput === 'search') {
+      setSearchQuery(val);
+    } else {
+      setFormData((prev) => ({ ...prev, [activeInput]: val }));
+    }
+  }, [activeInput]);
+
+  const onKeyPress = useCallback((button) => {
+    if (button === '{shift}' || button === '{lock}') {
+      setKeyboardLayout((prev) => (prev === 'default' ? 'shift' : 'default'));
+    }
+  }, []);
+
+  const focusInput = useCallback((name, currentVal) => {
+    if (!vkEnabled) return;
+    setActiveInput(name);
+    setKeyboardLayout('default');
+    setTimeout(() => {
+      keyboardRef.current?.setInput(currentVal ?? '', name);
+      document.activeElement?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  }, [vkEnabled]);
+
+  const toggleVK = useCallback(() => {
+    setVkEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem('vkEnabled', next);
+      if (!next) setActiveInput(null);
+      return next;
+    });
+  }, []);
+
   // ── Filtering ───────────────────────────────────────────────────
 
   const filteredEntrants = entrants.filter((e) => {
@@ -413,7 +455,7 @@ export default function App() {
     <div style={{ background: theme.bg, minHeight: '100vh', color: theme.text, fontFamily: "'Courier Prime', monospace", position: 'relative' }}>
       <div style={{ position: 'fixed', inset: 0, backgroundImage: `radial-gradient(circle at 50% 0%, ${theme.copperDark}11 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }} />
 
-      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 48px', position: 'relative', zIndex: 1 }}>
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 48px', position: 'relative', zIndex: 1, paddingBottom: (activeInput && vkEnabled) ? 360 : 48 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -605,9 +647,9 @@ export default function App() {
 
             {/* Row 2: form fields + submit in one horizontal line */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} autoFocus />
-              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} />
-              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 1.5 }} />
+              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} autoFocus />
+              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} />
+              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 1.5 }} />
               <button onClick={addEntrant} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')} style={{
                 ...baseButton, flex: 1, whiteSpace: 'nowrap',
                 background: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.border : theme.copper,
@@ -656,6 +698,9 @@ export default function App() {
                 <button onClick={exportNewsletter} style={{ ...baseButton, background: 'transparent', border: `1px solid ${theme.border}`, color: theme.textMuted, fontSize: 13 }}>
                   Export Newsletter ({stats.newsletter})
                 </button>
+                <button onClick={toggleVK} style={{ ...baseButton, background: vkEnabled ? `${theme.copper}22` : 'transparent', border: `1px solid ${vkEnabled ? theme.copper : theme.border}`, color: vkEnabled ? theme.copperLight : theme.textMuted, fontSize: 13 }}>
+                  ⌨ Virtual Keyboard {vkEnabled ? 'On' : 'Off'}
+                </button>
                 <button onClick={goHome} style={{ ...baseButton, background: 'none', border: 'none', color: theme.textMuted, fontSize: 13, textAlign: 'left', padding: '8px 0' }}>
                   ← Back to Kiosk
                 </button>
@@ -686,7 +731,7 @@ export default function App() {
               <h2 style={{ fontSize: 22, color: theme.copperLight, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>The Ledger</h2>
             </div>
 
-            <input type="text" placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ ...baseInput, marginBottom: 16 }} />
+            <input type="text" placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => focusInput('search', searchQuery)} style={{ ...baseInput, marginBottom: 16 }} />
 
             {filteredEntrants.length === 0 && (
               <div style={{ textAlign: 'center', color: theme.textMuted, padding: 40 }}>
@@ -856,6 +901,98 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ── VIRTUAL KEYBOARD ───────────────────────────────────── */}
+      {activeInput && vkEnabled && (
+        <>
+          <style>{`
+            .kb-fence .hg-theme-default {
+              background: #1a1815;
+              border-top: 1px solid #2e2a22;
+              border-radius: 0;
+              padding: 12px 16px 16px;
+              font-family: 'Courier Prime', monospace;
+            }
+            .kb-fence .hg-button {
+              background: #242018;
+              border-bottom: 3px solid #1a1815;
+              border-radius: 5px;
+              color: #e8dcc8;
+              font-family: 'Courier Prime', monospace;
+              font-size: 17px;
+              font-weight: 600;
+              height: 52px;
+              box-shadow: none;
+            }
+            .kb-fence .hg-button:active {
+              background: #c87533;
+              color: #1a1a1a;
+              border-bottom-color: #8b5220;
+              transform: translateY(1px);
+            }
+            .kb-fence .hg-button.hg-functionBtn {
+              background: #2e2a22;
+              color: #8a7e6e;
+              font-size: 13px;
+            }
+            .kb-fence .hg-button.hg-functionBtn:active {
+              background: #c87533;
+              color: #1a1a1a;
+            }
+            .kb-fence .hg-button[data-skbtn="{space}"] {
+              background: #2e2a22;
+              flex-grow: 6;
+            }
+            .kb-fence .hg-button[data-skbtn="{bksp}"] {
+              background: #3a2a1a;
+              color: #c87533;
+            }
+            .kb-fence .hg-row {
+              gap: 6px;
+              margin-bottom: 6px;
+            }
+          `}</style>
+          {/* Scrim: clicking outside keyboard dismisses it */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+            onMouseDown={() => setActiveInput(null)}
+          />
+          <div
+            className="kb-fence"
+            style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 }}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Keyboard
+              keyboardRef={(r) => { keyboardRef.current = r; }}
+              inputName={activeInput}
+              layoutName={keyboardLayout}
+              layout={{
+                default: [
+                  '1 2 3 4 5 6 7 8 9 0 - {bksp}',
+                  'q w e r t y u i o p @ .',
+                  'a s d f g h j k l \' _',
+                  '{shift} z x c v b n m , ! ? {shift}',
+                  '{space}',
+                ],
+                shift: [
+                  '! @ # $ % ^ & * ( ) + {bksp}',
+                  'Q W E R T Y U I O P @ .',
+                  'A S D F G H J K L " _',
+                  '{shift} Z X C V B N M , ! ? {shift}',
+                  '{space}',
+                ],
+              }}
+              display={{
+                '{bksp}': '⌫',
+                '{shift}': '⇧',
+                '{space}': 'SPACE',
+              }}
+              onChange={onKeyboardChange}
+              onKeyPress={onKeyPress}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

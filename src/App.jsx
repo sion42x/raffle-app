@@ -332,17 +332,17 @@ function PinModal({ onSuccess, onCancel }) {
 function QRTile({ label, url, color, unconfigured }) {
   return (
     <div style={{
-      flex: 1, background: theme.surface, border: `1px solid ${theme.border}`,
+      width: 240, background: theme.surface, border: `1px solid ${theme.border}`,
       borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      alignItems: 'center',
+      alignItems: 'center', flexShrink: 0,
     }}>
-      <div style={{ width: '100%', aspectRatio: '1/1', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', aspectRatio: '1/1', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, boxSizing: 'border-box' }}>
         {unconfigured
           ? <span style={{ fontSize: 11, color: '#999', textAlign: 'center', padding: 8 }}>Set VITE_{label.toUpperCase().replace(' ', '_')}_* in .env</span>
-          : <QRCodeSVG value={url} size={180} bgColor="#ffffff" fgColor="#111111" style={{ width: '100%', height: '100%' }} />
+          : <QRCodeSVG value={url} size={200} bgColor="#ffffff" fgColor="#111111" style={{ width: '100%', height: '100%' }} />
         }
       </div>
-      <div style={{ padding: '10px 8px', fontSize: 13, fontWeight: 700, color: color || theme.text, letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center' }}>
+      <div style={{ padding: '12px 8px', fontSize: 14, fontWeight: 700, color: color || theme.text, letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center' }}>
         {label}
       </div>
     </div>
@@ -378,7 +378,7 @@ function PaymentModal({ purchase, qty, onPaid, onCancel }) {
     }}>
       <div style={{
         background: theme.surface, border: `1px solid ${theme.border}`,
-        borderRadius: 10, padding: '32px 40px', maxWidth: 860, width: '100%',
+        borderRadius: 10, padding: '32px 48px', maxWidth: 1000, width: '100%',
         boxShadow: `0 0 60px rgba(0,0,0,0.6)`,
       }}>
         {/* Amount due */}
@@ -393,7 +393,7 @@ function PaymentModal({ purchase, qty, onPaid, onCancel }) {
         </div>
 
         {/* Payment options */}
-        <div style={{ display: 'flex', gap: 14, marginBottom: 28 }}>
+        <div style={{ display: 'flex', gap: 32, marginBottom: 28, justifyContent: 'center' }}>
           <QRTile label="Cash / Credit" url={squareUrl} color="#3c8bcb" unconfigured={!SQUARE_APP_ID} />
 
           <QRTile label="Venmo"    url={venmoUrl}   color="#3d95ce" unconfigured={!VENMO_USER} />

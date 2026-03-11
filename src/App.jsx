@@ -492,17 +492,6 @@ export default function App() {
     return null;
   }, [formData, formNewsletter, formPurchase]);
 
-  const requestPayment = useCallback(() => {
-    const err = validateForm();
-    if (err) { setError(err); return; }
-    setActiveInput(null);
-    if (formPurchase === 'none') {
-      addEntrant();
-    } else {
-      setShowPayment(true);
-    }
-  }, [validateForm, formPurchase, addEntrant]);
-
   const addEntrant = useCallback(async () => {
     try {
       const entrant = await api('/entrants', {
@@ -523,6 +512,17 @@ export default function App() {
       setError(e.message);
     }
   }, [formData, formNewsletter, formPurchase, formQty, refresh]);
+
+  const requestPayment = useCallback(() => {
+    const err = validateForm();
+    if (err) { setError(err); return; }
+    setActiveInput(null);
+    if (formPurchase === 'none') {
+      addEntrant();
+    } else {
+      setShowPayment(true);
+    }
+  }, [validateForm, formPurchase, addEntrant]);
 
   const updateEntrant = useCallback(async (id, changes) => {
     try {

@@ -450,6 +450,7 @@ export default function App() {
   const [activeInput, setActiveInput] = useState(null);
   const [keyboardLayout, setKeyboardLayout] = useState('default');
   const keyboardRef = useRef(null);
+  const blurTimer = useRef(null);
   const [vkEnabled, setVkEnabled] = useState(() => localStorage.getItem('vkEnabled') !== 'false');
   const [showPin, setShowPin] = useState(false);
 
@@ -583,7 +584,12 @@ export default function App() {
     }
   }, []);
 
+  const blurInput = useCallback(() => {
+    blurTimer.current = setTimeout(() => setActiveInput(null), 150);
+  }, []);
+
   const focusInput = useCallback((name, currentVal) => {
+    clearTimeout(blurTimer.current);
     if (!vkEnabled) return;
     setActiveInput(name);
     setKeyboardLayout('default');
@@ -624,7 +630,7 @@ export default function App() {
     <div style={{ background: theme.bg, minHeight: '100vh', color: theme.text, fontFamily: "'Courier Prime', monospace", position: 'relative' }}>
       <div style={{ position: 'fixed', inset: 0, backgroundImage: `radial-gradient(circle at 50% 0%, ${theme.copperDark}11 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }} />
 
-      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 48px', position: 'relative', zIndex: 1, paddingBottom: (activeInput && vkEnabled) ? 360 : 48 }}>
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 48px', position: 'relative', zIndex: 1, paddingBottom: (activeInput && vkEnabled) ? 460 : 48 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -816,9 +822,9 @@ export default function App() {
 
             {/* Row 2: form fields + submit in one horizontal line */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} autoFocus />
-              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} />
-              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 1.5 }} />
+              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} autoFocus />
+              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} />
+              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 1.5 }} />
               <button onClick={requestPayment} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')} style={{
                 ...baseButton, flex: 1, whiteSpace: 'nowrap',
                 background: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.border : theme.copper,
@@ -900,7 +906,7 @@ export default function App() {
               <h2 style={{ fontSize: 22, color: theme.copperLight, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>The Ledger</h2>
             </div>
 
-            <input type="text" placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => focusInput('search', searchQuery)} style={{ ...baseInput, marginBottom: 16 }} />
+            <input type="text" placeholder="Search by name, email, or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => focusInput('search', searchQuery)} onBlur={blurInput} style={{ ...baseInput, marginBottom: 16 }} />
 
             {filteredEntrants.length === 0 && (
               <div style={{ textAlign: 'center', color: theme.textMuted, padding: 40 }}>
@@ -1106,9 +1112,9 @@ export default function App() {
               border-radius: 5px;
               color: #e8dcc8;
               font-family: 'Courier Prime', monospace;
-              font-size: 17px;
+              font-size: 20px;
               font-weight: 600;
-              height: 52px;
+              height: 72px;
               box-shadow: none;
             }
             .kb-fence .hg-button:active {
@@ -1139,15 +1145,11 @@ export default function App() {
               margin-bottom: 6px;
             }
           `}</style>
-          {/* Scrim: clicking outside keyboard dismisses it */}
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 99 }}
-            onMouseDown={() => setActiveInput(null)}
-          />
           <div
             className="kb-fence"
             style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 }}
             onMouseDown={(e) => e.preventDefault()}
+            onTouchStart={(e) => e.preventDefault()}
           >
             <Keyboard
               keyboardRef={(r) => { keyboardRef.current = r; }}

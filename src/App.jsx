@@ -169,7 +169,7 @@ function PrizeCard({ prize, won = 0, highlight = false }) {
 function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, onQtyChange }) {
   const [imgErr, setImgErr] = useState(false);
   return (
-    <button onClick={onClick} style={{
+    <div onClick={onClick} style={{
       flex: 1, padding: 0, cursor: 'pointer', textAlign: 'left',
       background: selected ? `${theme.copper}18` : theme.surface,
       border: `2px solid ${selected ? theme.copper : theme.border}`,
@@ -177,6 +177,7 @@ function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, o
       boxShadow: selected ? `0 0 16px ${theme.copper}44` : 'none',
       transition: 'all 0.15s', display: 'flex', flexDirection: 'column',
       fontFamily: "'Courier Prime', monospace",
+      userSelect: 'none',
     }}>
       <div style={{ height: 220, background: theme.bg, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {image && !imgErr
@@ -207,7 +208,7 @@ function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, o
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

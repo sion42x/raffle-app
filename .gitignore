@@ -1,5 +1,7 @@
 node_modules/
 dist/
 server/raffle.db
+server/raffle.db-shm
+server/raffle.db-wal
 *.db
 .env

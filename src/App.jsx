@@ -417,22 +417,24 @@ export default function App() {
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div style={{ fontSize: 12, color: theme.textMuted, letterSpacing: '0.25em', textTransform: 'uppercase' }}>
-            Chymist Press × GalaxyCon 2026
-          </div>
-          <div style={{ cursor: 'pointer', textAlign: 'center' }} onClick={goHome}>
+          <div style={{ cursor: 'pointer', textAlign: 'left' }} onClick={goHome}>
             <h1 style={{ margin: 0, fontSize: 36, fontWeight: 700, color: theme.copper, letterSpacing: '0.05em', fontFamily: "'Playfair Display', Georgia, serif" }}>
               The Fence's Ledger
             </h1>
-            <div style={{ width: 80, height: 2, background: `linear-gradient(90deg, transparent, ${theme.copper}, transparent)`, margin: '6px auto 0' }} />
+            <div style={{ width: 80, height: 2, background: `linear-gradient(90deg, ${theme.copper}, transparent)`, margin: '6px 0 0' }} />
           </div>
-          {view !== 'admin' ? (
-            <button onClick={() => { setView('admin'); setError(null); }} title="Staff access" style={{ background: 'none', border: 'none', color: theme.border, cursor: 'pointer', fontSize: 22, padding: 4, lineHeight: 1, transition: 'color 0.2s' }}>
-              ⚙
-            </button>
-          ) : (
-            <div style={{ width: 32 }} />
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ fontSize: 12, color: theme.textMuted, letterSpacing: '0.25em', textTransform: 'uppercase' }}>
+              Chymist Press × GalaxyCon 2026
+            </div>
+            {view !== 'admin' ? (
+              <button onClick={() => { setView('admin'); setError(null); }} title="Staff access" style={{ background: 'none', border: 'none', color: theme.border, cursor: 'pointer', fontSize: 22, padding: 4, lineHeight: 1, transition: 'color 0.2s' }}>
+                ⚙
+              </button>
+            ) : (
+              <div style={{ width: 32 }} />
+            )}
+          </div>
         </div>
 
         {/* Error banner */}

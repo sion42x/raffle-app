@@ -1,15 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Keyboard from 'react-simple-keyboard';
 import 'react-simple-keyboard/build/css/index.css';
+import { QRCodeSVG } from 'qrcode.react';
 
 const PURCHASE_LEVELS = {
-  none:        { label: 'No Purchase',       entries: 0, icon: '—'  },
-  hook_crook:  { label: 'By Hook & Crook',   entries: 2, icon: '📕' },
-  thiefcatcher:{ label: 'Thiefcatcher',      entries: 2, icon: '📗' },
-  both_books:  { label: 'Both Books',        entries: 5, icon: '📚' },
+  none:        { label: 'No Purchase',       entries: 0, icon: '—',  price: 0  },
+  hook_crook:  { label: 'By Hook & Crook',   entries: 2, icon: '📕', price: 15 },
+  thiefcatcher:{ label: 'Thiefcatcher',      entries: 2, icon: '📗', price: 17 },
+  both_books:  { label: 'Both Books',        entries: 5, icon: '📚', price: 30 },
   // legacy value — kept for any existing DB rows
-  one_book:    { label: '1 Book',            entries: 2, icon: '📕' },
+  one_book:    { label: '1 Book',            entries: 2, icon: '📕', price: 15 },
 };
+
+function calcTotal(purchase, qty) {
+  return (PURCHASE_LEVELS[purchase]?.price || 0) * qty;
+}
 
 const BOOKS = [
   { key: 'hook_crook',   title: 'By Hook & Crook', price_label: '$15', cover: '/books/hook-crook.jpg',   entries: 2 },
@@ -267,6 +272,153 @@ function BookCard({ book, selected, onClick }) {
   );
 }
 
+// ── PIN Modal ─────────────────────────────────────────────────────
+
+const ADMIN_PIN = '1555';
+
+function PinModal({ onSuccess, onCancel }) {
+  const [entered, setEntered] = useState('');
+  const [shake, setShake] = useState(false);
+
+  const press = (digit) => {
+    if (entered.length >= 4) return;
+    const next = entered + digit;
+    setEntered(next);
+    if (next.length === 4) {
+      if (next === ADMIN_PIN) {
+        onSuccess();
+      } else {
+        setShake(true);
+        setTimeout(() => { setShake(false); setEntered(''); }, 600);
+      }
+    }
+  };
+
+  const keys = ['1','2','3','4','5','6','7','8','9','←','0','✓'];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <style>{`@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }`}</style>
+      <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: '36px 40px', width: 300, textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 24 }}>Staff PIN</div>
+
+        {/* Dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 28, animation: shake ? 'shake 0.5s ease' : 'none' }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{ width: 16, height: 16, borderRadius: '50%', background: i < entered.length ? theme.copper : theme.border, transition: 'background 0.15s' }} />
+          ))}
+        </div>
+
+        {/* Numpad */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          {keys.map((k) => (
+            <button key={k} onClick={() => k === '←' ? setEntered(e => e.slice(0,-1)) : k === '✓' ? null : press(k)}
+              style={{ ...baseButton, padding: '18px 0', fontSize: 20, background: k === '✓' ? theme.border : theme.surfaceHover, border: `1px solid ${theme.border}`, color: k === '←' ? theme.copper : theme.text, borderRadius: 6 }}
+            >{k}</button>
+          ))}
+        </div>
+
+        <button onClick={onCancel} style={{ marginTop: 20, background: 'none', border: 'none', color: theme.textMuted, cursor: 'pointer', fontFamily: "'Courier Prime', monospace", fontSize: 13 }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Payment Modal ─────────────────────────────────────────────────
+
+function QRTile({ label, url, color, unconfigured }) {
+  return (
+    <div style={{
+      flex: 1, background: theme.surface, border: `1px solid ${theme.border}`,
+      borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      alignItems: 'center',
+    }}>
+      <div style={{ width: '100%', aspectRatio: '1/1', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, boxSizing: 'border-box' }}>
+        {unconfigured
+          ? <span style={{ fontSize: 11, color: '#999', textAlign: 'center', padding: 8 }}>Set VITE_{label.toUpperCase().replace(' ', '_')}_* in .env</span>
+          : <QRCodeSVG value={url} size={180} bgColor="#ffffff" fgColor="#111111" style={{ width: '100%', height: '100%' }} />
+        }
+      </div>
+      <div style={{ padding: '10px 8px', fontSize: 13, fontWeight: 700, color: color || theme.text, letterSpacing: '0.05em', textTransform: 'uppercase', textAlign: 'center' }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+const VENMO_USER   = import.meta.env.VITE_VENMO_USERNAME  || '';
+const CASHAPP_TAG  = import.meta.env.VITE_CASHAPP_CASHTAG || '';
+const SQUARE_APP_ID = import.meta.env.VITE_SQUARE_APP_ID  || '';
+
+function PaymentModal({ purchase, qty, onPaid, onCancel }) {
+  const total = calcTotal(purchase, qty);
+  const purchaseLabel = PURCHASE_LEVELS[purchase]?.label;
+  const note = encodeURIComponent('GalaxyCon Raffle');
+
+  const venmoUrl   = `venmo://paycharge?txn=pay&recipients=${VENMO_USER}&amount=${total}&note=${note}`;
+  const cashAppUrl = `https://cash.app/$${CASHAPP_TAG}/${total}`;
+  const squareUrl  = SQUARE_APP_ID ? `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify({
+    amount_money: { amount: total * 100, currency_code: 'USD' },
+    callback_url: 'https://localhost.local',
+    client_id: SQUARE_APP_ID,
+    version: '1.3',
+    notes: 'GalaxyCon Raffle',
+    options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD'] },
+  }))}` : '';
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.88)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 32,
+    }}>
+      <div style={{
+        background: theme.surface, border: `1px solid ${theme.border}`,
+        borderRadius: 10, padding: '32px 40px', maxWidth: 860, width: '100%',
+        boxShadow: `0 0 60px rgba(0,0,0,0.6)`,
+      }}>
+        {/* Amount due */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 13, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 8 }}>
+            {purchaseLabel}{qty > 1 ? ` × ${qty}` : ''}
+          </div>
+          <div style={{ fontSize: 72, fontWeight: 700, color: theme.gold, fontFamily: "'Playfair Display', Georgia, serif", lineHeight: 1, textShadow: `0 0 40px ${theme.gold}44` }}>
+            ${total}
+          </div>
+          <div style={{ fontSize: 14, color: theme.textMuted, marginTop: 8 }}>Collect payment, then tap Paid</div>
+        </div>
+
+        {/* Payment options */}
+        <div style={{ display: 'flex', gap: 14, marginBottom: 28 }}>
+          <QRTile label="Cash / Credit" url={squareUrl} color="#3c8bcb" unconfigured={!SQUARE_APP_ID} />
+
+          <QRTile label="Venmo"    url={venmoUrl}   color="#3d95ce" unconfigured={!VENMO_USER} />
+          <QRTile label="Cash App" url={cashAppUrl} color="#00d64f" unconfigured={!CASHAPP_TAG} />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 14 }}>
+          <button onClick={onCancel} style={{
+            ...baseButton, flex: 1, background: 'transparent',
+            border: `1px solid ${theme.border}`, color: theme.textMuted, fontSize: 18,
+          }}>
+            Cancel
+          </button>
+          <button onClick={onPaid} style={{
+            ...baseButton, flex: 3, background: theme.copper,
+            color: '#1a1a1a', fontSize: 24, padding: '22px',
+          }}>
+            ✓ Paid
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────
 
 export default function App() {
@@ -281,6 +433,7 @@ export default function App() {
   const [formNewsletter, setFormNewsletter] = useState(false);
   const [formPurchase, setFormPurchase] = useState('none');
   const [formQty, setFormQty] = useState(1);
+  const [showPayment, setShowPayment] = useState(false);
 
 
   // Other UI state
@@ -297,6 +450,7 @@ export default function App() {
   const [keyboardLayout, setKeyboardLayout] = useState('default');
   const keyboardRef = useRef(null);
   const [vkEnabled, setVkEnabled] = useState(() => localStorage.getItem('vkEnabled') !== 'false');
+  const [showPin, setShowPin] = useState(false);
 
 
   // ── Data loading ────────────────────────────────────────────────
@@ -327,11 +481,23 @@ export default function App() {
 
   // ── Entrant management ──────────────────────────────────────────
 
-  const addEntrant = useCallback(async () => {
-    if (!formData.name.trim()) return;
-    if (!formData.email.trim()) { setError('Email is required'); return; }
-    if (!formNewsletter && formPurchase === 'none') { setError('Select at least newsletter signup or a purchase'); return; }
+  const validateForm = useCallback(() => {
+    if (!formData.name.trim()) return 'Name is required';
+    if (!formData.email.trim()) return 'Email is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) return 'Invalid email address';
+    if (formData.phone.trim() && formData.phone.replace(/\D/g, '').length < 7) return 'Phone number looks too short';
+    if (!formNewsletter && formPurchase === 'none') return 'Select at least newsletter signup or a purchase';
+    return null;
+  }, [formData, formNewsletter, formPurchase]);
 
+  const requestPayment = useCallback(() => {
+    const err = validateForm();
+    if (err) { setError(err); return; }
+    setActiveInput(null);
+    setShowPayment(true);
+  }, [validateForm]);
+
+  const addEntrant = useCallback(async () => {
     try {
       const entrant = await api('/entrants', {
         method: 'POST',
@@ -341,11 +507,13 @@ export default function App() {
       setFormNewsletter(false);
       setFormPurchase('none');
       setFormQty(1);
+      setShowPayment(false);
       setError(null);
       setConfirmedEntrant(entrant);
       await refresh();
       setView('confirm');
     } catch (e) {
+      setShowPayment(false);
       setError(e.message);
     }
   }, [formData, formNewsletter, formPurchase, formQty, refresh]);
@@ -470,7 +638,7 @@ export default function App() {
               Chymist Press × GalaxyCon 2026
             </div>
             {view !== 'admin' ? (
-              <button onClick={() => { setView('admin'); setError(null); }} title="Staff access" style={{ background: 'none', border: 'none', color: theme.border, cursor: 'pointer', fontSize: 22, padding: 4, lineHeight: 1, transition: 'color 0.2s' }}>
+              <button onClick={() => setShowPin(true)} title="Staff access" style={{ background: 'none', border: 'none', color: theme.border, cursor: 'pointer', fontSize: 22, padding: 4, lineHeight: 1, transition: 'color 0.2s' }}>
                 ⚙
               </button>
             ) : (
@@ -647,10 +815,10 @@ export default function App() {
 
             {/* Row 2: form fields + submit in one horizontal line */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} autoFocus />
-              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 2 }} />
-              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onKeyDown={(e) => e.key === 'Enter' && addEntrant()} style={{ ...baseInput, flex: 1.5 }} />
-              <button onClick={addEntrant} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')} style={{
+              <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} autoFocus />
+              <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} />
+              <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 1.5 }} />
+              <button onClick={requestPayment} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')} style={{
                 ...baseButton, flex: 1, whiteSpace: 'nowrap',
                 background: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.border : theme.copper,
                 color: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.textMuted : '#1a1a1a',
@@ -901,6 +1069,24 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ── PIN MODAL ──────────────────────────────────────────── */}
+      {showPin && (
+        <PinModal
+          onSuccess={() => { setShowPin(false); setView('admin'); setError(null); }}
+          onCancel={() => setShowPin(false)}
+        />
+      )}
+
+      {/* ── PAYMENT MODAL ──────────────────────────────────────── */}
+      {showPayment && (
+        <PaymentModal
+          purchase={formPurchase}
+          qty={formQty}
+          onPaid={addEntrant}
+          onCancel={() => setShowPayment(false)}
+        />
+      )}
 
       {/* ── VIRTUAL KEYBOARD ───────────────────────────────────── */}
       {activeInput && vkEnabled && (

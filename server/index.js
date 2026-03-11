@@ -82,6 +82,17 @@ app.post('/api/entrants', async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required' });
 
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRe.test(email.trim())) return res.status(400).json({ error: 'Invalid email address' });
+  if (phone?.trim()) {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7) return res.status(400).json({ error: 'Phone number looks too short' });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = db.prepare('SELECT id FROM entrants WHERE email = ?').get(normalizedEmail);
+  if (existing) return res.status(409).json({ error: 'That email is already in the raffle' });
+
   const nl = newsletter ? 1 : 0;
   const purch = purchase || 'none';
   const q = Math.max(1, parseInt(qty) || 1);
@@ -91,7 +102,7 @@ app.post('/api/entrants', async (req, res) => {
   const result = db.prepare(`
     INSERT INTO entrants (name, email, phone, newsletter, purchase, qty, entries)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), (email || '').trim().toLowerCase(), (phone || '').trim(), nl, purch, q, entries);
+  `).run(name.trim(), normalizedEmail, (phone || '').trim(), nl, purch, q, entries);
 
   const entrant = db.prepare('SELECT * FROM entrants WHERE id = ?').get(result.lastInsertRowid);
   if (nl && entrant.email) subscribeToBeehiiv(entrant.email);

@@ -496,8 +496,12 @@ export default function App() {
     const err = validateForm();
     if (err) { setError(err); return; }
     setActiveInput(null);
-    setShowPayment(true);
-  }, [validateForm]);
+    if (formPurchase === 'none') {
+      addEntrant();
+    } else {
+      setShowPayment(true);
+    }
+  }, [validateForm, formPurchase, addEntrant]);
 
   const addEntrant = useCallback(async () => {
     try {

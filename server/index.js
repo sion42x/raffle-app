@@ -17,6 +17,7 @@ db.pragma('foreign_keys = ON');
 
 // Migrations
 try { db.exec(`ALTER TABLE entrants ADD COLUMN qty INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE entrants ADD COLUMN art_prints INTEGER NOT NULL DEFAULT 0`); } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS entrants (
@@ -27,6 +28,7 @@ db.exec(`
     newsletter INTEGER NOT NULL DEFAULT 0,
     purchase TEXT NOT NULL DEFAULT 'none',
     qty INTEGER NOT NULL DEFAULT 1,
+    art_prints INTEGER NOT NULL DEFAULT 0,
     entries INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
   );
@@ -40,9 +42,9 @@ db.exec(`
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function calcEntries(newsletter, purchase, qty = 1) {
-  const map = { none: 0, hook_crook: 2, thiefcatcher: 2, both_books: 5, one_book: 2 };
-  return (newsletter ? 1 : 0) + (map[purchase] || 0) * qty;
+function calcEntries(newsletter, purchase, qty = 1, artPrints = 0) {
+  const map = { none: 0, hook_crook: 2, thiefcatcher: 2, both_books: 5, art_print: 1, one_book: 2 };
+  return (newsletter ? 1 : 0) + (map[purchase] || 0) * qty + artPrints;
 }
 
 async function subscribeToBeehiiv(email) {
@@ -78,7 +80,7 @@ app.get('/api/entrants', (req, res) => {
 });
 
 app.post('/api/entrants', async (req, res) => {
-  const { name, email, phone, newsletter, purchase, qty } = req.body;
+  const { name, email, phone, newsletter, purchase, qty, art_prints } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required' });
 
@@ -96,13 +98,14 @@ app.post('/api/entrants', async (req, res) => {
   const nl = newsletter ? 1 : 0;
   const purch = purchase || 'none';
   const q = Math.max(1, parseInt(qty) || 1);
-  const entries = calcEntries(nl, purch, q);
+  const ap = Math.max(0, parseInt(art_prints) || 0);
+  const entries = calcEntries(nl, purch, q, ap);
   if (entries === 0) return res.status(400).json({ error: 'Select at least newsletter or a purchase' });
 
   const result = db.prepare(`
-    INSERT INTO entrants (name, email, phone, newsletter, purchase, qty, entries)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), normalizedEmail, (phone || '').trim(), nl, purch, q, entries);
+    INSERT INTO entrants (name, email, phone, newsletter, purchase, qty, art_prints, entries)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name.trim(), normalizedEmail, (phone || '').trim(), nl, purch, q, ap, entries);
 
   const entrant = db.prepare('SELECT * FROM entrants WHERE id = ?').get(result.lastInsertRowid);
   if (nl && entrant.email) subscribeToBeehiiv(entrant.email);
@@ -113,16 +116,17 @@ app.patch('/api/entrants/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM entrants WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
-  const newsletter = req.body.newsletter !== undefined ? (req.body.newsletter ? 1 : 0) : existing.newsletter;
-  const purchase   = req.body.purchase  !== undefined ? req.body.purchase  : existing.purchase;
-  const qty        = req.body.qty       !== undefined ? Math.max(1, parseInt(req.body.qty) || 1) : (existing.qty || 1);
-  const name       = req.body.name      !== undefined ? req.body.name.trim() : existing.name;
-  const email      = req.body.email     !== undefined ? req.body.email.trim().toLowerCase() : existing.email;
-  const phone      = req.body.phone     !== undefined ? req.body.phone.trim() : existing.phone;
+  const newsletter  = req.body.newsletter  !== undefined ? (req.body.newsletter ? 1 : 0) : existing.newsletter;
+  const purchase    = req.body.purchase    !== undefined ? req.body.purchase    : existing.purchase;
+  const qty         = req.body.qty         !== undefined ? Math.max(1, parseInt(req.body.qty) || 1) : (existing.qty || 1);
+  const art_prints  = req.body.art_prints  !== undefined ? Math.max(0, parseInt(req.body.art_prints) || 0) : (existing.art_prints || 0);
+  const name        = req.body.name        !== undefined ? req.body.name.trim() : existing.name;
+  const email       = req.body.email       !== undefined ? req.body.email.trim().toLowerCase() : existing.email;
+  const phone       = req.body.phone       !== undefined ? req.body.phone.trim() : existing.phone;
 
   db.prepare(`
-    UPDATE entrants SET name=?, email=?, phone=?, newsletter=?, purchase=?, qty=?, entries=? WHERE id=?
-  `).run(name, email, phone, newsletter, purchase, qty, calcEntries(newsletter, purchase, qty), req.params.id);
+    UPDATE entrants SET name=?, email=?, phone=?, newsletter=?, purchase=?, qty=?, art_prints=?, entries=? WHERE id=?
+  `).run(name, email, phone, newsletter, purchase, qty, art_prints, calcEntries(newsletter, purchase, qty, art_prints), req.params.id);
 
   res.json(db.prepare('SELECT * FROM entrants WHERE id = ?').get(req.params.id));
 });

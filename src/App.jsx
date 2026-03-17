@@ -8,12 +8,13 @@ const PURCHASE_LEVELS = {
   hook_crook:  { label: 'By Hook & Crook',   entries: 2, icon: '📕', price: 15 },
   thiefcatcher:{ label: 'Thiefcatcher',      entries: 2, icon: '📗', price: 17 },
   both_books:  { label: 'Both Books',        entries: 5, icon: '📚', price: 30 },
+  art_print:   { label: 'Art Print',         entries: 1, icon: '🖼️', price: 5  },
   // legacy value — kept for any existing DB rows
   one_book:    { label: '1 Book',            entries: 2, icon: '📕', price: 15 },
 };
 
-function calcTotal(purchase, qty) {
-  return (PURCHASE_LEVELS[purchase]?.price || 0) * qty;
+function calcTotal(purchase, qty, artPrints = 0) {
+  return (PURCHASE_LEVELS[purchase]?.price || 0) * qty + 5 * artPrints;
 }
 
 const BOOKS = [
@@ -21,6 +22,9 @@ const BOOKS = [
   { key: 'thiefcatcher', title: 'Thiefcatcher',     price_label: '$17', cover: '/books/thiefcatcher.jpg', entries: 2 },
   { key: 'both_books',   title: 'Both Books',       price_label: '$30', cover: '/books/bundle.jpg',       entries: 5, bundle: true },
 ];
+
+const SCREENSAVER_VIDEOS = ['/screensaver/video1.mp4', '/screensaver/video2.mp4'];
+const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
 
 const PRIZES = [
   { tier: 'grand',  label: 'Grand Prize',  count: 2,  description: '1kg Copper Bar',              detail: 'Azorian Mint',     image: '/prizes/grand.jpg'  },
@@ -47,8 +51,8 @@ function prizeTierForWinner(winnerIndex) {
   return null;
 }
 
-function calcEntries(newsletter, purchase, qty = 1) {
-  return (newsletter ? 1 : 0) + (PURCHASE_LEVELS[purchase]?.entries || 0) * qty;
+function calcEntries(newsletter, purchase, qty = 1, artPrints = 0) {
+  return (newsletter ? 1 : 0) + (PURCHASE_LEVELS[purchase]?.entries || 0) * qty + artPrints;
 }
 
 function entrantSummary(e) {
@@ -56,6 +60,8 @@ function entrantSummary(e) {
   if (e.newsletter) parts.push('📜 Newsletter');
   if (e.purchase && e.purchase !== 'none')
     parts.push(PURCHASE_LEVELS[e.purchase].icon + ' ' + PURCHASE_LEVELS[e.purchase].label);
+  if (e.art_prints > 0)
+    parts.push(`🖼️ Art Print${e.art_prints > 1 ? ` ×${e.art_prints}` : ''}`);
   return parts.length ? parts.join(' + ') : '—';
 }
 
@@ -166,7 +172,7 @@ function PrizeCard({ prize, won = 0, highlight = false }) {
   );
 }
 
-function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, onQtyChange }) {
+function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, onQtyChange, minQty = 1 }) {
   const [imgErr, setImgErr] = useState(false);
   return (
     <div onClick={onClick} style={{
@@ -192,7 +198,7 @@ function SelectionTile({ label, sublabel, image, icon, selected, onClick, qty, o
         {selected && onQtyChange ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
             <button
-              onClick={(e) => { e.stopPropagation(); onQtyChange(Math.max(1, qty - 1)); }}
+              onClick={(e) => { e.stopPropagation(); onQtyChange(Math.max(minQty, qty - 1)); }}
               style={{ background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, borderRadius: 4, width: 28, height: 28, cursor: 'pointer', fontFamily: "'Courier Prime', monospace", fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >−</button>
             <span style={{ fontSize: 16, color: theme.copperLight, fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{qty}</span>
@@ -353,8 +359,8 @@ const VENMO_USER   = import.meta.env.VITE_VENMO_USERNAME  || '';
 const CASHAPP_TAG  = import.meta.env.VITE_CASHAPP_CASHTAG || '';
 const SQUARE_APP_ID = import.meta.env.VITE_SQUARE_APP_ID  || '';
 
-function PaymentModal({ purchase, qty, onPaid, onCancel }) {
-  const total = calcTotal(purchase, qty);
+function PaymentModal({ purchase, qty, artPrints = 0, onPaid, onCancel }) {
+  const total = calcTotal(purchase, qty, artPrints);
   const purchaseLabel = PURCHASE_LEVELS[purchase]?.label;
   const note = encodeURIComponent('GalaxyCon Raffle');
 
@@ -384,7 +390,9 @@ function PaymentModal({ purchase, qty, onPaid, onCancel }) {
         {/* Amount due */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{ fontSize: 13, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 8 }}>
-            {purchaseLabel}{qty > 1 ? ` × ${qty}` : ''}
+            {purchase !== 'none' && <span>{purchaseLabel}{qty > 1 ? ` × ${qty}` : ''}</span>}
+            {purchase !== 'none' && artPrints > 0 && <span> + </span>}
+            {artPrints > 0 && <span>Art Print{artPrints > 1 ? ` × ${artPrints}` : ''}</span>}
           </div>
           <div style={{ fontSize: 72, fontWeight: 700, color: theme.gold, fontFamily: "'Playfair Display', Georgia, serif", lineHeight: 1, textShadow: `0 0 40px ${theme.gold}44` }}>
             ${total}
@@ -434,6 +442,7 @@ export default function App() {
   const [formNewsletter, setFormNewsletter] = useState(false);
   const [formPurchase, setFormPurchase] = useState('none');
   const [formQty, setFormQty] = useState(1);
+  const [formArtPrints, setFormArtPrints] = useState(0);
   const [showPayment, setShowPayment] = useState(false);
 
 
@@ -453,6 +462,8 @@ export default function App() {
   const blurTimer = useRef(null);
   const [vkEnabled, setVkEnabled] = useState(() => localStorage.getItem('vkEnabled') !== 'false');
   const [showPin, setShowPin] = useState(false);
+  const [showScreensaver, setShowScreensaver] = useState(false);
+  const [ssVideoIndex, setSsVideoIndex] = useState(0);
 
 
   // ── Data loading ────────────────────────────────────────────────
@@ -481,6 +492,20 @@ export default function App() {
     return () => clearTimeout(t);
   }, [view]);
 
+  // ── Screensaver idle timer ───────────────────────────────────────
+
+  useEffect(() => {
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { setShowScreensaver(true); setSsVideoIndex(0); }, SCREENSAVER_IDLE_MS);
+    };
+    const events = ['mousemove', 'mousedown', 'touchstart', 'keydown'];
+    events.forEach(ev => document.addEventListener(ev, reset, { passive: true }));
+    reset();
+    return () => { clearTimeout(timer); events.forEach(ev => document.removeEventListener(ev, reset)); };
+  }, []);
+
   // ── Entrant management ──────────────────────────────────────────
 
   const validateForm = useCallback(() => {
@@ -488,20 +513,21 @@ export default function App() {
     if (!formData.email.trim()) return 'Email is required';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) return 'Invalid email address';
     if (formData.phone.trim() && formData.phone.replace(/\D/g, '').length < 7) return 'Phone number looks too short';
-    if (!formNewsletter && formPurchase === 'none') return 'Select at least newsletter signup or a purchase';
+    if (!formNewsletter && formPurchase === 'none' && formArtPrints === 0) return 'Select at least newsletter signup or a purchase';
     return null;
-  }, [formData, formNewsletter, formPurchase]);
+  }, [formData, formNewsletter, formPurchase, formArtPrints]);
 
   const addEntrant = useCallback(async () => {
     try {
       const entrant = await api('/entrants', {
         method: 'POST',
-        body: { name: formData.name.trim(), email: formData.email.trim(), phone: formData.phone.trim(), newsletter: formNewsletter, purchase: formPurchase, qty: formPurchase === 'none' ? 1 : formQty },
+        body: { name: formData.name.trim(), email: formData.email.trim(), phone: formData.phone.trim(), newsletter: formNewsletter, purchase: formPurchase, qty: formPurchase === 'none' ? 1 : formQty, art_prints: formArtPrints },
       });
       setFormData({ name: '', email: '', phone: '' });
       setFormNewsletter(false);
       setFormPurchase('none');
       setFormQty(1);
+      setFormArtPrints(0);
       setShowPayment(false);
       setError(null);
       setConfirmedEntrant(entrant);
@@ -511,18 +537,18 @@ export default function App() {
       setShowPayment(false);
       setError(e.message);
     }
-  }, [formData, formNewsletter, formPurchase, formQty, refresh]);
+  }, [formData, formNewsletter, formPurchase, formQty, formArtPrints, refresh]);
 
   const requestPayment = useCallback(() => {
     const err = validateForm();
     if (err) { setError(err); return; }
     setActiveInput(null);
-    if (formPurchase === 'none') {
+    if (formPurchase === 'none' && formArtPrints === 0) {
       addEntrant();
     } else {
       setShowPayment(true);
     }
-  }, [validateForm, formPurchase, addEntrant]);
+  }, [validateForm, formPurchase, formArtPrints, addEntrant]);
 
   const updateEntrant = useCallback(async (id, changes) => {
     try {
@@ -784,6 +810,17 @@ export default function App() {
                 onClick={() => { setFormPurchase(formPurchase === 'both_books' ? 'none' : 'both_books'); setFormQty(1); }}
               />
               <SelectionTile
+                label="Art Print"
+                sublabel="$5 · +1 entry"
+                image="/books/art-print.jpg"
+                icon="🖼️"
+                selected={formArtPrints > 0}
+                qty={formArtPrints}
+                onQtyChange={setFormArtPrints}
+                minQty={0}
+                onClick={() => setFormArtPrints(formArtPrints === 0 ? 1 : 0)}
+              />
+              <SelectionTile
                 label="Newsletter Only"
                 sublabel="Free · +1 entry"
                 icon="📜"
@@ -800,8 +837,8 @@ export default function App() {
               />
             </div>
 
-            {/* Newsletter add-on when a book is selected */}
-            {formPurchase !== 'none' && (
+            {/* Newsletter add-on when a book or art print is selected */}
+            {(formPurchase !== 'none' || formArtPrints > 0) && (
               <button
                 onClick={() => setFormNewsletter(!formNewsletter)}
                 style={{
@@ -818,9 +855,9 @@ export default function App() {
             )}
 
             {/* Entry count */}
-            {(formNewsletter || formPurchase !== 'none') && (
+            {(formNewsletter || formPurchase !== 'none' || formArtPrints > 0) && (
               <div style={{ textAlign: 'center', marginBottom: 14, fontSize: 20, color: theme.gold, fontWeight: 700 }}>
-                = {calcEntries(formNewsletter, formPurchase, formQty)} raffle {calcEntries(formNewsletter, formPurchase, formQty) === 1 ? 'entry' : 'entries'}
+                = {calcEntries(formNewsletter, formPurchase, formQty, formArtPrints)} raffle {calcEntries(formNewsletter, formPurchase, formQty, formArtPrints) === 1 ? 'entry' : 'entries'}
               </div>
             )}
 
@@ -829,10 +866,10 @@ export default function App() {
               <input ref={nameRef} type="text" placeholder="Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onFocus={() => focusInput('name', formData.name)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} autoFocus />
               <input type="email" placeholder="Email *" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} onFocus={() => focusInput('email', formData.email)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 2 }} />
               <input type="tel" placeholder="Phone (optional)" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} onFocus={() => focusInput('phone', formData.phone)} onBlur={blurInput} onKeyDown={(e) => e.key === 'Enter' && requestPayment()} style={{ ...baseInput, flex: 1.5 }} />
-              <button onClick={requestPayment} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')} style={{
+              <button onClick={requestPayment} disabled={!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none' && formArtPrints === 0)} style={{
                 ...baseButton, flex: 1, whiteSpace: 'nowrap',
-                background: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.border : theme.copper,
-                color: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none')) ? theme.textMuted : '#1a1a1a',
+                background: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none' && formArtPrints === 0)) ? theme.border : theme.copper,
+                color: (!formData.name.trim() || !formData.email.trim() || (!formNewsletter && formPurchase === 'none' && formArtPrints === 0)) ? theme.textMuted : '#1a1a1a',
                 fontSize: 20,
               }}>
                 Record Entry
@@ -1094,9 +1131,29 @@ export default function App() {
         <PaymentModal
           purchase={formPurchase}
           qty={formQty}
+          artPrints={formArtPrints}
           onPaid={addEntrant}
           onCancel={() => setShowPayment(false)}
         />
+      )}
+
+      {/* ── SCREENSAVER ─────────────────────────────────────────── */}
+      {showScreensaver && (
+        <div
+          onTouchStart={() => setShowScreensaver(false)}
+          onClick={() => setShowScreensaver(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#000', cursor: 'none' }}
+        >
+          <video
+            key={ssVideoIndex}
+            ref={el => { if (el) { el.muted = true; el.play(); } }}
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onEnded={() => setSsVideoIndex(i => (i + 1) % SCREENSAVER_VIDEOS.length)}
+          >
+            <source src={SCREENSAVER_VIDEOS[ssVideoIndex]} type="video/mp4" />
+          </video>
+        </div>
       )}
 
       {/* ── VIRTUAL KEYBOARD ───────────────────────────────────── */}

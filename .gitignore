@@ -3,5 +3,6 @@ dist/
 server/raffle.db
 server/raffle.db-shm
 server/raffle.db-wal
+public/screensaver/*.mp4
 *.db
 .env
